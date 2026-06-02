@@ -25,6 +25,7 @@
   <section class="card">
     <h2>Abastecimento movel</h2>
     <form id="com-form" class="form-stack">
+
       <div class="form-section">
         <p class="form-section-kicker">Quando e frota</p>
         <div class="form-grid">
@@ -39,6 +40,10 @@
           <label class="field-span-full">
             Operador / Motorista
             <input id="operator" name="operator" placeholder="Ex.: Joao Silva" required />
+          </label>
+          <label class="field-span-full">
+            Local / Retiro
+            <input id="location" name="location" placeholder="Ex.: Retiro Norte" required />
           </label>
         </div>
       </div>
@@ -66,23 +71,18 @@
       </div>
 
       <div class="form-section">
-        <p class="form-section-kicker">Local e servico</p>
+        <p class="form-section-kicker">Servico</p>
         <div class="form-grid">
-          <label>
-            Local / Retiro
-            <input id="location" name="location" placeholder="Ex.: Retiro Norte" required />
-          </label>
-          <label>
+          <label class="field-span-full">
             Frente de trabalho
             <input id="workFront" name="workFront" placeholder="Ex.: Frente 02 - talhao leste" />
           </label>
+          <label class="field-span-full">
+            Observacao (opcional)
+            <textarea id="observation" name="observation" rows="2" placeholder="Detalhes adicionais"></textarea>
+          </label>
         </div>
       </div>
-
-      <label>
-        Observacao (opcional)
-        <textarea id="observation" name="observation" rows="2" placeholder="Detalhes adicionais"></textarea>
-      </label>
 
       <button type="submit">Registrar abastecimento</button>
     </form>
