@@ -8,6 +8,11 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="stylesheet" href="./styles.css" />
   <title>COMBOIO — ABASTECIMENTO MOVEL</title>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js?v=2", { updateViaCache: "none" });
+    }
+  </script>
 </head>
 <body>
 <main class="container">
@@ -107,7 +112,7 @@
     </p>
   </section>
 </main>
-<script src="./config.js?v=1"></script>
-<script src="./app.js?v=1"></script>
+<script src="./config.js?v=2"></script>
+<script src="./app.js?v=2"></script>
 </body>
 </html>

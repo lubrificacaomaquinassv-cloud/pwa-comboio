@@ -169,7 +169,7 @@ form.addEventListener("submit", (e) => {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const reg = await navigator.serviceWorker.register("./sw.js?v=1", { updateViaCache: "none" });
+      const reg = await navigator.serviceWorker.register("./sw.js?v=2", { updateViaCache: "none" });
       reg.update();
     } catch(err) { console.error("SW error:", err); }
   });
