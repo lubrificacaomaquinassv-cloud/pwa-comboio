@@ -1,5 +1,6 @@
 const STORAGE_KEY   = "comboio-v2-records";
 const PENDING_KEY   = "comboio-v2-pending";
+const FAILED_KEY    = "comboio-v2-failed";
 const ORDER_SEQ_KEY = "comboio-v2-order-seq";
 
 const SB_URL = window.SUPABASE_URL || "https://azhpxhrwhegfysoeqmft.supabase.co";
@@ -35,6 +36,9 @@ function toIso(val) {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+// NOTA: esse numero e so uma pre-visualizacao local pro operador.
+// O numero definitivo/oficial agora e gerado pelo proprio banco (trigger no Supabase),
+// entao nunca ha risco de dois aparelhos gerarem o mesmo order_number.
 function peekOrder() {
   const n = Number(localStorage.getItem(ORDER_SEQ_KEY) || "0") + 1;
   return `COM-${String(n).padStart(5,"0")}`;
@@ -54,6 +58,8 @@ function getRecords() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY
 function saveRecords(r) { localStorage.setItem(STORAGE_KEY, JSON.stringify(r)); }
 function getPending()   { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"); } catch { return []; } }
 function savePending(q) { localStorage.setItem(PENDING_KEY, JSON.stringify(q)); }
+function getFailed()    { try { return JSON.parse(localStorage.getItem(FAILED_KEY) || "[]"); } catch { return []; } }
+function saveFailed(f)  { localStorage.setItem(FAILED_KEY, JSON.stringify(f)); }
 function escapeHtml(t)  { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
 
 function updateConnectionStatus() {
@@ -63,15 +69,25 @@ function updateConnectionStatus() {
 
 function updateSyncStatus() {
   const n = getPending().length;
-  if (n === 0) {
+  const f = getFailed().length;
+  if (n === 0 && f === 0) {
     dbSyncStatus.textContent = "Sincronizacao com banco em dia.";
     dbSyncStatus.className = "connection-status online";
-  } else {
+  } else if (n > 0 && f === 0) {
     dbSyncStatus.textContent = `${n} lancamento(s) aguardando envio ao banco.`;
+    dbSyncStatus.className = "connection-status offline";
+  } else if (n === 0 && f > 0) {
+    dbSyncStatus.textContent = `Atencao: ${f} lancamento(s) com erro - precisa revisar.`;
+    dbSyncStatus.className = "connection-status offline";
+  } else {
+    dbSyncStatus.textContent = `${n} aguardando envio - ${f} com erro.`;
     dbSyncStatus.className = "connection-status offline";
   }
 }
 
+// Retorna { ok:true } em sucesso.
+// { ok:false, fatal:true }  -> erro do servidor (4xx): nao adianta repetir, tira da fila.
+// { ok:false, fatal:false } -> falha de rede/conexao: mantem na fila pra tentar de novo.
 async function syncToSupabase(record) {
   try {
     const r = await fetch(SB_URL + "/rest/v1/comboio_v2", {
@@ -90,23 +106,45 @@ async function syncToSupabase(record) {
         observation:  record.observation  || null
       })
     });
-    return r.ok || r.status === 201;
-  } catch(e) {
+    if (r.ok || r.status === 201) return { ok: true };
+    let body = "";
+    try { body = await r.text(); } catch (_) {}
+    return { ok: false, fatal: r.status >= 400 && r.status < 500, error: `HTTP ${r.status}: ${body}` };
+  } catch (e) {
     console.error("Sync error:", e);
-    return false;
+    return { ok: false, fatal: false, error: String(e) };
   }
 }
 
+let syncing = false;
 async function processQueue() {
   if (!navigator.onLine) { updateSyncStatus(); return; }
-  let queue = getPending();
-  while (queue.length) {
-    const ok = await syncToSupabase(queue[0]);
-    if (!ok) break;
-    queue = queue.slice(1);
+  if (syncing) return; // evita duas execucoes simultaneas (timer + evento online)
+  syncing = true;
+  try {
+    let queue = getPending();
+    const stuck = [];
+    let i = 0;
+    while (i < queue.length) {
+      const result = await syncToSupabase(queue[i]);
+      if (result.ok) {
+        queue.splice(i, 1); // sucesso: remove, nao avanca indice
+      } else if (result.fatal) {
+        console.error("Lancamento rejeitado pelo servidor, isolando:", queue[i]?.orderNumber, result.error);
+        stuck.push({ ...queue[i], error: result.error, falhouEm: new Date().toISOString() });
+        queue.splice(i, 1); // isola o item ruim, nao trava os proximos
+      } else {
+        i++; // falha de rede: deixa na fila, tenta o proximo item agora
+      }
+    }
     savePending(queue);
+    if (stuck.length) {
+      saveFailed([...getFailed(), ...stuck]);
+    }
+  } finally {
+    syncing = false;
+    updateSyncStatus();
   }
-  updateSyncStatus();
 }
 
 function enqueue(record) {
@@ -185,3 +223,7 @@ updateSyncStatus();
 updateOrderPreview();
 processQueue();
 renderRecent();
+
+// tenta sincronizar periodicamente enquanto o app estiver aberto
+// (cobre o caso de abrir rapido, salvar e fechar antes do evento "online" disparar)
+setInterval(processQueue, 60000);
